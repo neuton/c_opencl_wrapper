@@ -123,11 +123,41 @@ extern void opencl_init(cl_device_type_id device_type_id)
 	cl_context_properties cps[3] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0 };
 	switch (device_type_id)
 	{
-		case CPU: err = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL); break;
-		case GPU: err = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL); break;
-		default: clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL);
+		case CPU:
+			if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
+			{
+				if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
+				{
+					fputs("OpenCL> Error: no capable devices found!\n", stderr);
+					clCheckError(-1, "getting device id");
+				}
+				fputs("OpenCL> Warning: CPU device not found, using GPU instead!\n", stderr);
+			}
+			break;
+		case GPU:
+			if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
+			{
+				if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
+				{
+					fputs("OpenCL> Error: no capable devices found!\n", stderr);
+					clCheckError(-1, "getting device id");
+				}
+				fputs("OpenCL> Warning: GPU device not found, using CPU instead!\n", stderr);
+			}
+			break;
+		default:
+			if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
+			{
+				if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
+				{
+					fputs("OpenCL> Error: no capable devices found!\n", stderr);
+					clCheckError(-1, "getting device id");
+				}
+				fputs("OpenCL> using CPU device\n", stderr);
+			}
+			else
+				fputs("OpenCL> using GPU device\n", stderr);
 	}
-	clCheckError(err, "getting device id");
 	context = clCreateContext(cps, 1, &device_id, NULL, NULL, &err); clCheckError(err, "creating context");
 	queue = clCreateCommandQueue(context, device_id, 0, &err); clCheckError(err, "creating command queue");
 	GWS[0] = LWS[0] = 64;
