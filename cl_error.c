@@ -61,6 +61,7 @@ extern void clGetErrorString(short int error, char * string)
 		case CL_INVALID_BUFFER_SIZE: strcpy(string, "INVALID_BUFFER_SIZE"); break;
 		case CL_INVALID_MIP_LEVEL: strcpy(string, "INVALID_MIP_LEVEL"); break;
 		case CL_INVALID_GLOBAL_WORK_SIZE: strcpy(string, "CL_INVALID_GLOBAL_WORK_SIZE"); break;
+		case CL_PLATFORM_NOT_FOUND_KHR: strcpy(string, "CL_PLATFORM_NOT_FOUND_KHR"); break;
 		default: strcpy(string, "UNKNOWN");
 	}
 }
