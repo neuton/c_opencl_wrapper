@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
 
 #include "cl_error.h"
 
@@ -115,48 +116,42 @@ extern void opencl_free_var(cl_var var)
 	}
 }
 
-extern void opencl_init(cl_device_type_id device_type_id)
+extern void opencl_init_cpu()
 {
 	cl_platform_id platform_id;
 	int err;
 	err = clGetPlatformIDs(1, &platform_id, NULL); clCheckError(err, "getting platform id");
 	cl_context_properties cps[3] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0 };
-	switch (device_type_id)
+	if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
 	{
-		case CPU:
-			if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
-			{
-				if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
-				{
-					fputs("OpenCL> Error: no capable devices found!\n", stderr);
-					clCheckError(-1, "getting device id");
-				}
-				fputs("OpenCL> Warning: CPU device not found, using GPU instead!\n", stderr);
-			}
-			break;
-		case GPU:
-			if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
-			{
-				if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
-				{
-					fputs("OpenCL> Error: no capable devices found!\n", stderr);
-					clCheckError(-1, "getting device id");
-				}
-				fputs("OpenCL> Warning: GPU device not found, using CPU instead!\n", stderr);
-			}
-			break;
-		default:
-			if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
-			{
-				if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
-				{
-					fputs("OpenCL> Error: no capable devices found!\n", stderr);
-					clCheckError(-1, "getting device id");
-				}
-				fputs("OpenCL> using CPU device\n", stderr);
-			}
-			else
-				fputs("OpenCL> using GPU device\n", stderr);
+		if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
+		{
+			fputs("OpenCL> Error: no capable devices found!\n", stderr);
+			clCheckError(-1, "getting device id");
+		}
+		fputs("OpenCL> Warning: CPU device not found, using GPU instead!\n", stderr);
+	}
+	context = clCreateContext(cps, 1, &device_id, NULL, NULL, &err); clCheckError(err, "creating context");
+	queue = clCreateCommandQueue(context, device_id, 0, &err); clCheckError(err, "creating command queue");
+	GWS[0] = LWS[0] = 64;
+	ND = 1;
+	GWS[1] = GWS[2] = LWS[1] = LWS[2] = 0;
+}
+
+extern void opencl_init_gpu()
+{
+	cl_platform_id platform_id;
+	int err;
+	err = clGetPlatformIDs(1, &platform_id, NULL); clCheckError(err, "getting platform id");
+	cl_context_properties cps[3] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0 };
+	if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
+	{
+		if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
+		{
+			fputs("OpenCL> Error: no capable devices found!\n", stderr);
+			clCheckError(-1, "getting device id");
+		}
+		fputs("OpenCL> Warning: GPU device not found, using CPU instead!\n", stderr);
 	}
 	context = clCreateContext(cps, 1, &device_id, NULL, NULL, &err); clCheckError(err, "creating context");
 	queue = clCreateCommandQueue(context, device_id, 0, &err); clCheckError(err, "creating command queue");
@@ -170,38 +165,25 @@ extern cl_program opencl_create_program(const char *kernel_filename, const char 
 {
 	cl_program program;
 	int err;
-	FILE * kf = fopen(kernel_filename, "r"); if (kf==NULL) clCheckError(CL_SUCCESS+1, "opening kernel file");
-	size_t kfs = 0; while (fgetc(kf)!=EOF) kfs++; rewind(kf);
-	char * kernel_src = (char *)malloc(kfs);
-	uint i; for (i=0; i<kfs; i++) kernel_src[i] = fgetc(kf); fclose(kf);
-	for (i=0; kernel_filename[i]!='.' && kernel_filename[i]!='\0'; i++);
-	if (kernel_filename[i]!='\0' && kernel_filename[i+1]!='\0' && kernel_filename[i+1]=='c' &&
-		(kernel_filename[i+2]=='\0' || kernel_filename[i+2]=='l'))
+	char * kernel_src = malloc(11+strlen(kernel_filename)), * opts = malloc(strlen(options)+5);
+	strcat(strcat(strcpy(kernel_src, "#include<"), kernel_filename), ">");
+	program = clCreateProgramWithSource(context, 1, (const char **)&kernel_src, NULL, &err);
+	clCheckError(err, "creating 'include' program ");
+	err = clBuildProgram(program, 0, NULL, strcat(strcpy(opts, options), " -I."), NULL, NULL);
+	if (err == CL_BUILD_PROGRAM_FAILURE)
 	{
-		program = clCreateProgramWithSource(context, 1, (const char **)&kernel_src, (const size_t *)&kfs, &err);
-		clCheckError(err, "creating program from source");
-		err = clBuildProgram(program, 0, NULL, options, NULL, NULL);
-		if (err == CL_BUILD_PROGRAM_FAILURE)
+		size_t log_size;
+		clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
+		if (log_size>2)
 		{
-			size_t log_size;
-			clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
-			if (log_size>2)
-			{
-				fprintf(stderr, "OpenCL> %s build log:\n", kernel_filename);
-				char * build_log = (char *)malloc(log_size);
-				clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, log_size, build_log, NULL);
-				fputs(build_log, stderr);
-				free(build_log); build_log = NULL;
-			}
+			fprintf(stderr, "OpenCL> %s build log:\n", kernel_filename);
+			char * build_log = (char *)malloc(log_size);
+			clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, log_size, build_log, NULL);
+			fputs(build_log, stderr);
+			free(build_log); build_log = NULL;
 		}
-		clCheckError(err, "building program");
 	}
-	else
-	{
-		program = clCreateProgramWithBinary(context, 1,  &device_id, (const size_t *)&kfs, (const unsigned char **)&kernel_src, NULL, &err);
-		clCheckError(err, "creating program from binary");
-	}
-	free(kernel_src); kernel_src = NULL;
+	clCheckError(err, "building program");
 	return program;
 }
 
