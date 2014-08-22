@@ -26,9 +26,8 @@ void opencl_set_var(cl_var var, const void * val);
 void opencl_get_var(cl_var var, void * val);
 void opencl_free_var(cl_var var);
 
-//void opencl_init(cl_device_type_id device_type_id);
-void opencl_init_cpu();
-void opencl_init_gpu();
+void opencl_init();
+void opencl_init_strict(cl_device_type device_type);
 
 cl_program opencl_create_program(const char *kernel_filename, const char *options);
 //void opencl_free_program(cl_program program);
