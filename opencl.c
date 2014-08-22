@@ -116,21 +116,21 @@ extern void opencl_free_var(cl_var var)
 	}
 }
 
-extern void opencl_init_cpu()
+extern void opencl_init()
 {
 	cl_platform_id platform_id;
-	int err;
-	err = clGetPlatformIDs(1, &platform_id, NULL); clCheckError(err, "getting platform id");
+	clCheckError(clGetPlatformIDs(1, &platform_id, NULL), "getting platform id");
 	cl_context_properties cps[3] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0 };
-	if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
+	if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
 	{
-		if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
+		if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
 		{
 			fputs("OpenCL> Error: no capable devices found!\n", stderr);
-			clCheckError(-1, "getting device id");
+			clCheckError(-1, "getting devices ids");
 		}
-		fputs("OpenCL> Warning: CPU device not found, using GPU instead!\n", stderr);
+		fputs("OpenCL> Warning: GPU device not found, using CPU instead!\n", stderr);
 	}
+	int err;
 	context = clCreateContext(cps, 1, &device_id, NULL, NULL, &err); clCheckError(err, "creating context");
 	queue = clCreateCommandQueue(context, device_id, 0, &err); clCheckError(err, "creating command queue");
 	GWS[0] = LWS[0] = 64;
@@ -138,20 +138,21 @@ extern void opencl_init_cpu()
 	GWS[1] = GWS[2] = LWS[1] = LWS[2] = 0;
 }
 
-extern void opencl_init_gpu()
+extern void opencl_init_strict(cl_device_type device_type)
 {
 	cl_platform_id platform_id;
-	int err;
-	err = clGetPlatformIDs(1, &platform_id, NULL); clCheckError(err, "getting platform id");
+	clCheckError(clGetPlatformIDs(1, &platform_id, NULL), "getting platform id");
 	cl_context_properties cps[3] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0 };
-	if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
+	int err = clGetDeviceIDs(platform_id, device_type, 1, &device_id, NULL);
+	if (err != CL_SUCCESS)
 	{
-		if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
-		{
-			fputs("OpenCL> Error: no capable devices found!\n", stderr);
-			clCheckError(-1, "getting device id");
-		}
-		fputs("OpenCL> Warning: GPU device not found, using CPU instead!\n", stderr);
+		if (device_type == CL_DEVICE_TYPE_GPU)
+			fputs("OpenCL> Error: no capable GPU device found!\n", stderr);
+		else if (device_type == CL_DEVICE_TYPE_CPU)
+			fputs("OpenCL> Error: no capable CPU device found!\n", stderr);
+		else
+			fputs("OpenCL> Error: no capable device found!\n", stderr);
+		clCheckError(err, "getting device id");
 	}
 	context = clCreateContext(cps, 1, &device_id, NULL, NULL, &err); clCheckError(err, "creating context");
 	queue = clCreateCommandQueue(context, device_id, 0, &err); clCheckError(err, "creating command queue");
