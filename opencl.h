@@ -4,10 +4,21 @@
 #include <CL/opencl.h>
 #endif
 
-#define int cl_int
-#define uint cl_uint
-#define ushort cl_ushort
-#define real cl_float
+#ifndef int
+	#define int cl_int
+#endif
+
+#ifndef uint
+	#define uint cl_uint
+#endif
+
+#ifndef ushort
+	#define ushort cl_ushort
+#endif
+
+#ifndef real
+	#define real cl_float
+#endif
 
 //typedef enum {CPU, GPU} cl_device_type_id;
 //typedef enum {t_cl_int, t_cl_uint, t_cl_ushort, t_cl_float, t_cl_double, t_cl_mem} cl_type;
