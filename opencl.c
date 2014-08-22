@@ -124,10 +124,7 @@ extern void opencl_init()
 	if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
 	{
 		if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
-		{
-			fputs("OpenCL> Error: no capable devices found!\n", stderr);
-			clCheckError(-1, "getting devices ids");
-		}
+			clCheckError(CL_DEVICE_NOT_FOUND, "getting devices ids");
 		fputs("OpenCL> Warning: GPU device not found, using CPU instead!\n", stderr);
 	}
 	int err;
@@ -162,7 +159,7 @@ extern void opencl_init_strict(cl_device_type device_type)
 }
 
 //extern cl_program opencl_create_program(const char *kernel_filename, ...)
-extern cl_program opencl_create_program(const char *kernel_filename, const char *options)
+extern cl_program opencl_create_program_from_source(const char *kernel_filename, const char *options)
 {
 	cl_program program;
 	int err;
@@ -185,6 +182,21 @@ extern cl_program opencl_create_program(const char *kernel_filename, const char 
 		}
 	}
 	clCheckError(err, "building program");
+	return program;
+}
+
+extern cl_program opencl_create_program_from_binary(const char *kernel_filename, const char *options)
+{
+	cl_program program;
+	int err;
+	FILE * kf = fopen(kernel_filename, "r"); if (kf==NULL) clCheckError(CL_SUCCESS+1, "opening kernel file");
+	size_t kfs = 0; while (fgetc(kf)!=EOF) kfs++; rewind(kf);
+	char * kernel = (char *)malloc(kfs);
+	uint i; for (i=0; i<kfs; i++) kernel[i] = fgetc(kf); fclose(kf);
+	for (i=0; kernel_filename[i]!='.' && kernel_filename[i]!='\0'; i++);
+	program = clCreateProgramWithBinary(context, 1,  &device_id, (const size_t *)&kfs, (const unsigned char **)&kernel, NULL, &err);
+	clCheckError(err, "creating program from binary");
+	free(kernel); kernel = NULL;
 	return program;
 }
 
