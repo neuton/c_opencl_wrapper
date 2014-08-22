@@ -31,7 +31,7 @@ void opencl_init_strict(cl_device_type device_type);
 
 //cl_program opencl_create_program(const char *kernel_filename, const char *options);
 cl_program opencl_create_program_from_source(const char *kernel_filename, const char *options);
-cl_program opencl_create_program_from_binary(const char *kernel_filename, const char *options);
+cl_program opencl_create_program_from_binary(const char *kernel_filename);
 //void opencl_free_program(cl_program program);
 
 cl_kernel opencl_create_kernel(cl_program program, const char *kernel_name);

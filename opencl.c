@@ -185,7 +185,7 @@ extern cl_program opencl_create_program_from_source(const char *kernel_filename,
 	return program;
 }
 
-extern cl_program opencl_create_program_from_binary(const char *kernel_filename, const char *options)
+extern cl_program opencl_create_program_from_binary(const char *kernel_filename)
 {
 	cl_program program;
 	int err;
