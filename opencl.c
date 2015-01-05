@@ -7,11 +7,44 @@
 
 #include "opencl.h"
 
+static cl_platform_id platform;
 static cl_context context;
-static cl_command_queue queue;
-static cl_device_id device_id;
+static cl_command_queue * queues;
+static cl_device_id * devices;
+static uint ndevices;
+static uint cid;	// current device and queue id
 static size_t LWS[3], GWS[3];
 static ushort ND;
+
+extern void opencl_switch_device(uint id)
+{
+	cid = id;
+}
+
+extern uint opencl_get_devices_number()
+{
+	return ndevices;
+}
+
+extern cl_context opencl_get_context()
+{
+	return context;
+}
+
+extern cl_command_queue opencl_get_queue()
+{
+	return queues[cid];
+}
+
+extern cl_platform_id opencl_get_platform()
+{
+	return platform;
+}
+
+extern cl_device_id opencl_get_device()
+{
+	return devices[cid];
+}
 
 extern void opencl_set_nd(ushort n_dim)
 {
@@ -43,7 +76,6 @@ extern void opencl_set_global_ws(ushort nd, ...)
 
 extern cl_var opencl_create_var(size_t type_size, uint n, cl_mem_flags flags, const void * val)
 {
-	//if (n==0) clCheckError(CL_SUCCESS+1, "creating cl_var (n==0)");
 	cl_var var;
 	var.type_size = type_size;
 	var.n = n;
@@ -85,11 +117,11 @@ extern void opencl_set_var(cl_var var, const void * val)
 			*((cl_mem *)var.val) = clCreateBuffer(context, CL_MEM_READ_WRITE, var.type_size*var.n, NULL, &err);
 			clCheckError(err, "creating buffer");
 		}
-		clCheckError(clEnqueueWriteBuffer(queue, *((cl_mem *)var.val), CL_TRUE, 0, var.type_size*var.n, val, 0, NULL, NULL), "writing to buffer");
+		clCheckError(clEnqueueWriteBuffer(queues[cid], *((cl_mem *)var.val), CL_TRUE, 0, var.type_size*var.n, val, 0, NULL, NULL), "writing to buffer");
 	}
 }
 
-extern void opencl_get_var(cl_var var, void * val)
+extern void opencl_get_var(const cl_var var, void * val)
 {
 	if (var.n==1)
 	{
@@ -98,49 +130,16 @@ extern void opencl_get_var(cl_var var, void * val)
 			((char *)val)[i] = var.val[i];
 	}
 	else
-		clCheckError(clEnqueueReadBuffer(queue, *((cl_mem *)var.val), CL_TRUE, 0, var.type_size*var.n, val, 0, NULL, NULL), "reading from buffer");
+		clCheckError(clEnqueueReadBuffer(queues[cid], *((cl_mem *)var.val), CL_TRUE, 0, var.type_size*var.n, val, 0, NULL, NULL), "reading from buffer");
 }
 
-extern void opencl_free_var(cl_var var)
+extern void opencl_init(cl_device_type device_type)
 {
-	if (var.n==1)
-	{
-		free(var.val);
-		var.val = NULL;
-	}
-	else
-	{
-		clCheckError(clReleaseMemObject(*((cl_mem *)var.val)), "releasing buffer");
-		free(var.val);
-		var.val = NULL;
-	}
-}
-
-extern void opencl_init()
-{
-	cl_platform_id platform_id;
-	clCheckError(clGetPlatformIDs(1, &platform_id, NULL), "getting platform id");
-	cl_context_properties cps[3] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0 };
-	if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL) != CL_SUCCESS)
-	{
-		if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL) != CL_SUCCESS)
-			clCheckError(CL_DEVICE_NOT_FOUND, "getting devices ids");
-		fputs("OpenCL> Warning: GPU device not found, using CPU instead!\n", stderr);
-	}
-	int err;
-	context = clCreateContext(cps, 1, &device_id, NULL, NULL, &err); clCheckError(err, "creating context");
-	queue = clCreateCommandQueue(context, device_id, 0, &err); clCheckError(err, "creating command queue");
-	GWS[0] = LWS[0] = 64;
-	ND = 1;
-	GWS[1] = GWS[2] = LWS[1] = LWS[2] = 0;
-}
-
-extern void opencl_init_strict(cl_device_type device_type)
-{
-	cl_platform_id platform_id;
-	clCheckError(clGetPlatformIDs(1, &platform_id, NULL), "getting platform id");
-	cl_context_properties cps[3] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0 };
-	int err = clGetDeviceIDs(platform_id, device_type, 1, &device_id, NULL);
+	clCheckError(clGetPlatformIDs(1, &platform, NULL), "getting platform id");
+	cl_context_properties cps[3] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0 };
+	clCheckError(clGetDeviceIDs(platform, device_type, 0, NULL, &ndevices), "getting devices number");
+	devices = (cl_device_id *)malloc(ndevices * sizeof(cl_device_id));
+	int err = clGetDeviceIDs(platform, device_type, ndevices, devices, NULL);
 	if (err != CL_SUCCESS)
 	{
 		if (device_type == CL_DEVICE_TYPE_GPU)
@@ -149,16 +148,19 @@ extern void opencl_init_strict(cl_device_type device_type)
 			fputs("OpenCL> Error: no capable CPU device found!\n", stderr);
 		else
 			fputs("OpenCL> Error: no capable device found!\n", stderr);
-		clCheckError(err, "getting device id");
+		clCheckError(err, "getting devices ids");
 	}
-	context = clCreateContext(cps, 1, &device_id, NULL, NULL, &err); clCheckError(err, "creating context");
-	queue = clCreateCommandQueue(context, device_id, 0, &err); clCheckError(err, "creating command queue");
+	cid = 0;
+	context = clCreateContext(cps, ndevices, devices, NULL, NULL, &err); clCheckError(err, "creating context");
+	queues = (cl_command_queue *)malloc(ndevices * sizeof(cl_command_queue));
+	uint i;
+	for (i=0; i < ndevices; i++)
+		queues[i] = clCreateCommandQueue(context, devices[i], 0, &err); clCheckError(err, "creating command queue");
 	GWS[0] = LWS[0] = 64;
 	ND = 1;
 	GWS[1] = GWS[2] = LWS[1] = LWS[2] = 0;
 }
 
-//extern cl_program opencl_create_program(const char *kernel_filename, ...)
 extern cl_program opencl_create_program_from_source(const char *kernel_filename, const char *options)
 {
 	cl_program program;
@@ -170,15 +172,20 @@ extern cl_program opencl_create_program_from_source(const char *kernel_filename,
 	err = clBuildProgram(program, 0, NULL, strcat(strcpy(opts, options), " -I."), NULL, NULL);
 	if (err == CL_BUILD_PROGRAM_FAILURE)
 	{
-		size_t log_size;
-		clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
-		if (log_size>2)
+		char * build_log;
+		uint i;
+		for (i=0; i<ndevices; i++)
 		{
-			fprintf(stderr, "OpenCL> %s build log:\n", kernel_filename);
-			char * build_log = (char *)malloc(log_size);
-			clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, log_size, build_log, NULL);
-			fputs(build_log, stderr);
-			free(build_log); build_log = NULL;
+			size_t log_size;
+			clGetProgramBuildInfo(program, devices[i], CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
+			if (log_size>2)
+			{
+				fprintf(stderr, "OpenCL> %s build log [device #%i]:\n", kernel_filename, i);
+				build_log = (char *)malloc(log_size);
+				clGetProgramBuildInfo(program, devices[i], CL_PROGRAM_BUILD_LOG, log_size, build_log, NULL);
+				fputs(build_log, stderr);
+				free(build_log);
+			}
 		}
 	}
 	clCheckError(err, "building program");
@@ -194,21 +201,43 @@ extern cl_program opencl_create_program_from_binary(const char *kernel_filename)
 	char * kernel = (char *)malloc(kfs);
 	uint i; for (i=0; i<kfs; i++) kernel[i] = fgetc(kf); fclose(kf);
 	for (i=0; kernel_filename[i]!='.' && kernel_filename[i]!='\0'; i++);
-	program = clCreateProgramWithBinary(context, 1,  &device_id, (const size_t *)&kfs, (const unsigned char **)&kernel, NULL, &err);
+	program = clCreateProgramWithBinary(context, ndevices,  devices, (const size_t *)&kfs, (const unsigned char **)&kernel, NULL, &err);
 	clCheckError(err, "creating program from binary");
-	free(kernel); kernel = NULL;
+	free(kernel);
 	return program;
 }
 
-extern cl_kernel opencl_create_kernel(cl_program program, const char *kernel_name)
+extern void opencl_write_program_to_file(const cl_program program, const char * output_filename)
 {
-	char str[144];
+	size_t binary_size;
+	clCheckError(clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, sizeof(size_t), &binary_size, NULL), "getting binary size");
+	unsigned char * binary = (unsigned char *)malloc(binary_size);
+	clCheckError(clGetProgramInfo(program, CL_PROGRAM_BINARIES, sizeof(char *), &binary, NULL), "getting binary");
+	FILE * f = fopen(output_filename, "w");
+	if (f==NULL) { fprintf(stderr, "Error opening \"%s\"!\n", output_filename); exit(EXIT_FAILURE); }
+	uint i;
+	for (i=0; i<binary_size; i++) fputc((int)binary[i], f);
+	fclose(f);
+}
+
+extern cl_kernel opencl_create_kernel(cl_program program, const char * kernel_name)
+{
+	char * str = (char *)malloc(strlen(kernel_name) + 17);
 	sprintf(str, "creating kernel %s", kernel_name);
 	int err;
 	cl_kernel kernel = clCreateKernel(program, kernel_name, &err);
 	clCheckError(err, str);
 	return kernel;
 }
+
+//extern cl_kernel * opencl_create_kernels(const cl_program program)
+//{
+//	uint n;
+//	clCheckError(clCreateKernelsInProgram(program, 0, NULL, &n), "getting kernels number");
+//	cl_kernel * kernels = (cl_kernel *)malloc(n * sizeof(cl_kernel));
+//	clCheckError(clCreateKernelsInProgram(program, n, kernels, NULL), "creating kernels");
+//	return kernels;
+//}
 
 extern void opencl_set_kernel_arg(cl_kernel kernel, ushort i, cl_var var)
 {
@@ -236,22 +265,62 @@ extern void opencl_set_kernel_args(cl_kernel kernel, ...)
 	va_end(vl);
 }
 
-//extern void opencl_run_kernel(cl_kernel kernel, ushort nd = ND, size_t * local_ws = LWS, size_t * global_ws = GWS)
-//  |
-//  |
-// \|/
-//  V
-//extern void opencl_run_kernel(cl_kernel kernel, ...)
 extern void opencl_run_kernel(cl_kernel kernel)
 {
 	//clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME, 0, NULL, &n);
 	char name[128], str[145];
 	clCheckError(clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME, 128, name, NULL), "while getting kernel name");
 	sprintf(str, "launching kernel %s", name);
-	clCheckError(clEnqueueNDRangeKernel(queue, kernel, ND, NULL, GWS, LWS, 0, NULL, NULL), str);
+	clCheckError(clEnqueueNDRangeKernel(queues[cid], kernel, ND, NULL, GWS, LWS, 0, NULL, NULL), str);
 }
 
 extern void opencl_sync()
 {
-	clCheckError(clFinish(queue), "finishing queue");
+	clCheckError(clFinish(queues[cid]), "finishing queue");
+}
+
+extern void opencl_free_var(cl_var var)
+{
+	if (var.n==1)
+	{
+		free(var.val);
+		var.val = NULL;
+	}
+	else
+	{
+		clCheckError(clReleaseMemObject(*((cl_mem *)var.val)), "releasing buffer");
+		free(var.val);
+		var.val = NULL;
+	}
+}
+
+extern void opencl_free_program(cl_program program)
+{
+	clCheckError(clReleaseProgram(program), "releasing program");
+}
+
+extern void opencl_free_kernel(cl_kernel kernel)
+{
+	clCheckError(clReleaseKernel(kernel), "releasing kernel");
+}
+
+//extern void opencl_free_kernels(cl_kernel * kernels, uint n)
+//{
+//	uint i;
+//	for (i=0; i<n; i++)
+//		clCheckError(clReleaseKernel(kernels[i]), "releasing kernels");
+//	free(kernels);
+//}
+
+extern void opencl_done()
+{
+	clCheckError(clReleaseContext(context), "releasing context");
+	uint i;
+	for (i=0; i<ndevices; i++)
+	{
+		clCheckError(clReleaseCommandQueue(queues[i]), "releasing queues");
+		clCheckError(clReleaseDevice(devices[i]), "releasing devices");
+	}
+	free(queues);
+	free(devices);
 }
