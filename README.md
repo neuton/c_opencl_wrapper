@@ -18,7 +18,7 @@ main()
 	for (i=0; i<n; i++) v[i] = (real)i;
 	
 	// mandatory initialization
-	opencl_init(CL_DEVICE_TYPE_GPU);
+	opencl_init(0, CL_DEVICE_TYPE_GPU);
 	
 	// creating variables on device (and enqueing data copy)
 	cl_var dn = opencl_create_var(sizeof(uint), 1, CL_MEM_READ_ONLY, &n);

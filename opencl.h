@@ -22,7 +22,8 @@
 
 typedef struct {size_t type_size; uint n; char * val;} cl_var;
 
-void opencl_init(cl_device_type device_type);
+uint opencl_get_platforms_number();
+void opencl_init(uint platform_id, cl_device_type device_type);
 
 void opencl_switch_device(uint id);
 uint opencl_get_devices_number();

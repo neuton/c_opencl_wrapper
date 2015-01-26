@@ -133,9 +133,18 @@ extern void opencl_get_var(const cl_var var, void * val)
 		clCheckError(clEnqueueReadBuffer(queues[cid], *((cl_mem *)var.val), CL_TRUE, 0, var.type_size*var.n, val, 0, NULL, NULL), "reading from buffer");
 }
 
-extern void opencl_init(cl_device_type device_type)
+uint opencl_get_platforms_number()
 {
-	clCheckError(clGetPlatformIDs(1, &platform, NULL), "getting platform id");
+	uint nplatforms;
+	clCheckError(clGetPlatformIDs(0, NULL, &nplatforms), "getting platforms number");
+	return nplatforms;
+}
+
+extern void opencl_init(uint platform_id, cl_device_type device_type)
+{
+	cl_platform_id platforms[platform_id + 1];
+	clCheckError(clGetPlatformIDs(platform_id + 1, platforms, NULL), "getting platform id");
+	platform = platforms[platform_id];
 	cl_context_properties cps[3] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0 };
 	clCheckError(clGetDeviceIDs(platform, device_type, 0, NULL, &ndevices), "getting devices number");
 	devices = (cl_device_id *)malloc(ndevices * sizeof(cl_device_id));
