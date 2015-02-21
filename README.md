@@ -66,27 +66,20 @@ __kernel void test_kernel(uint n, __global real * v)
 `Makefile`:
 
 ```makefile
-INC = $(AMDAPPSDKROOT)/include
-LIB = $(AMDAPPSDKROOT)/lib/x86_64
-CC = gcc
+CFLAGS = -I"$(AMDAPPSDKROOT)/include"
+LDFLAGS = -L"$(AMDAPPSDKROOT)/lib/x86_64" -lOpenCL
+
 EXEC = host
 
 ifeq ($(OS), Windows_NT)
-	EXEC := $(EXEC).exe
-	SHELL = cmd
+EXEC := $(EXEC).exe
+SHELL = cmd
 else
-	SHELL = /bin/sh
+SHELL = /bin/sh
 endif
 
 $(EXEC): host.o cl_error.o opencl.o
-	@$(CC) $^ -o $@ -L"$(LIB)" -lOpenCL
-
 host.o: host.c opencl.h Makefile
-	@$(CC) -c $< -o $@ -I"$(INC)"
-
 opencl.o: opencl.c opencl.h cl_error.h Makefile
-	@$(CC) -c $< -o $@ -I"$(INC)"
-
 cl_error.o: cl_error.c cl_error.h Makefile
-	@$(CC) -c $< -o $@ -I"$(INC)"
 ```
