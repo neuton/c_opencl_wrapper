@@ -42,7 +42,7 @@ void opencl_set_var(cl_var var, const void * val);
 void opencl_get_var(const cl_var var, void * val);
 
 cl_program opencl_create_program_from_source(const char * kernel_filename, const char *options);
-cl_program opencl_create_program_from_binary(const char * kernel_filename);
+cl_program opencl_create_program_from_binary(const char * kernel_filename, const char *options);
 void opencl_write_program_to_file(const cl_program program, const char * output_filename);
 
 cl_kernel opencl_create_kernel(const cl_program program, const char * kernel_name);

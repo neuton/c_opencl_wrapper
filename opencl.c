@@ -201,7 +201,7 @@ extern cl_program opencl_create_program_from_source(const char *kernel_filename,
 	return program;
 }
 
-extern cl_program opencl_create_program_from_binary(const char *kernel_filename)
+extern cl_program opencl_create_program_from_binary(const char *kernel_filename, const char *options)
 {
 	cl_program program;
 	int err;
@@ -213,6 +213,27 @@ extern cl_program opencl_create_program_from_binary(const char *kernel_filename)
 	program = clCreateProgramWithBinary(context, ndevices,  devices, (const size_t *)&kfs, (const unsigned char **)&kernel, NULL, &err);
 	clCheckError(err, "creating program from binary");
 	free(kernel);
+	char * opts = malloc(strlen(options)+5);
+	err = clBuildProgram(program, 0, NULL, strcat(strcpy(opts, options), " -I."), NULL, NULL);
+	if (err == CL_BUILD_PROGRAM_FAILURE)
+	{
+		char * build_log;
+		uint i;
+		for (i=0; i<ndevices; i++)
+		{
+			size_t log_size;
+			clGetProgramBuildInfo(program, devices[i], CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
+			if (log_size>2)
+			{
+				fprintf(stderr, "OpenCL> %s build log [device #%i]:\n", kernel_filename, i);
+				build_log = (char *)malloc(log_size);
+				clGetProgramBuildInfo(program, devices[i], CL_PROGRAM_BUILD_LOG, log_size, build_log, NULL);
+				fputs(build_log, stderr);
+				free(build_log);
+			}
+		}
+	}
+	clCheckError(err, "building program");
 	return program;
 }
 
@@ -225,7 +246,7 @@ extern void opencl_write_program_to_file(const cl_program program, const char * 
 	FILE * f = fopen(output_filename, "w");
 	if (f==NULL) { fprintf(stderr, "Error opening \"%s\"!\n", output_filename); exit(EXIT_FAILURE); }
 	uint i;
-	for (i=0; i<binary_size; i++) fputc((int)binary[i], f);
+	for (i=0; i<binary_size; i++) fputc(binary[i], f);
 	fclose(f);
 }
 
