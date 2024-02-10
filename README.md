@@ -63,20 +63,14 @@ __kernel void test_kernel(uint n, __global real * v)
 }
 ```
 
-`Makefile`:
+`Makefile` (Ubuntu):
 
 ```makefile
-CFLAGS = -I"$(AMDAPPSDKROOT)/include"
-LDFLAGS = -L"$(AMDAPPSDKROOT)/lib/x86_64" -lOpenCL
+CFLAGS = -I"/opt/rocm/include"
+LDFLAGS = -L"/opt/rocm/lib"
+LDLIBS = -lOpenCL
 
 EXEC = host
-
-ifeq ($(OS), Windows_NT)
-EXEC := $(EXEC).exe
-SHELL = cmd
-else
-SHELL = /bin/sh
-endif
 
 $(EXEC): host.o cl_error.o opencl.o
 host.o: host.c opencl.h Makefile
